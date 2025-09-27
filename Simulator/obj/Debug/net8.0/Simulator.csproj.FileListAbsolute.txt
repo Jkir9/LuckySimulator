@@ -1,0 +1,15 @@
+/workspaces/LuckySimulator/Simulator/bin/Debug/net8.0/Simulator
+/workspaces/LuckySimulator/Simulator/bin/Debug/net8.0/Simulator.deps.json
+/workspaces/LuckySimulator/Simulator/bin/Debug/net8.0/Simulator.runtimeconfig.json
+/workspaces/LuckySimulator/Simulator/bin/Debug/net8.0/Simulator.dll
+/workspaces/LuckySimulator/Simulator/bin/Debug/net8.0/Simulator.pdb
+/workspaces/LuckySimulator/Simulator/obj/Debug/net8.0/Simulator.GeneratedMSBuildEditorConfig.editorconfig
+/workspaces/LuckySimulator/Simulator/obj/Debug/net8.0/Simulator.AssemblyInfoInputs.cache
+/workspaces/LuckySimulator/Simulator/obj/Debug/net8.0/Simulator.AssemblyInfo.cs
+/workspaces/LuckySimulator/Simulator/obj/Debug/net8.0/Simulator.csproj.CoreCompileInputs.cache
+/workspaces/LuckySimulator/Simulator/obj/Debug/net8.0/Simulator.sourcelink.json
+/workspaces/LuckySimulator/Simulator/obj/Debug/net8.0/Simulator.dll
+/workspaces/LuckySimulator/Simulator/obj/Debug/net8.0/refint/Simulator.dll
+/workspaces/LuckySimulator/Simulator/obj/Debug/net8.0/Simulator.pdb
+/workspaces/LuckySimulator/Simulator/obj/Debug/net8.0/Simulator.genruntimeconfig.cache
+/workspaces/LuckySimulator/Simulator/obj/Debug/net8.0/ref/Simulator.dll
