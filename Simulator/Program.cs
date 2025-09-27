@@ -96,14 +96,14 @@ class Program
         {
             int newBoxes = player.diceStack / 30;
             
-            // 최대 10스택 누적 가능 조건 처리 (CSV에 명시된 내용)
+            // 최대 10스택 누적 가능 조건 처리
             if (player.rewardBoxStack + newBoxes > 10)
             {
                 newBoxes = 10 - player.rewardBoxStack;
                 if (newBoxes <= 0)
                 {
                     Console.WriteLine("최대 보상 상자 스택(10개)에 도달하여 추가 적립되지 않았습니다.");
-                    player.diceStack = 0; // 초과된 주사위 스택도 제거
+                    player.diceStack %= 30; // 남은 스택은 유지
                     return;
                 }
             }
@@ -130,12 +130,13 @@ class Program
 
             if (input == "Y")
             {
-                OpenRewardBox();
+                // 모든 상자를 한 번에 엽니다.
+                OpenRewardBox(); 
                 canOpenBox = false;
             }
             else if (input == "N")
             {
-                Console.WriteLine("상자를 열지 않고 진행합니다. 다음 스택이 쌓일 때까지 기다려야 합니다.");
+                Console.WriteLine("상자를 열지 않고 진행합니다. 다음 레벨업에서 다시 기회가 있습니다.");
                 canOpenBox = false;
             }
             else
@@ -144,28 +145,13 @@ class Program
             }
         }
     }
-
+    
     /// <summary>
-    /// 보상 상자를 열고 무작위 보상을 제공합니다. (가중치 적용)
+    /// 보상 목록과 가중치를 반환합니다.
     /// </summary>
-    static void OpenRewardBox()
+    static List<(Action<int, int> RewardAction, int Weight)> GetWeightedRewards()
     {
-        if (player.rewardBoxStack <= 0)
-        {
-            Console.WriteLine("보상 상자가 없습니다.");
-            return;
-        }
-        
-        // 현재 보상 계산에 사용될 스택 레벨 (N=1 to 10)을 결정합니다.
-        int rewardStackLevel = player.rewardBoxStack; 
-
-        player.rewardBoxStack--;
-        Console.WriteLine($"\n[상자 개봉] 남은 보상 상자: {player.rewardBoxStack}개");
-        Console.WriteLine($"[보상 레벨] 스택 {rewardStackLevel}에 해당하는 보상을 획득합니다.");
-        Console.WriteLine("================= 획득한 보상 ==================");
-
-        // 보상 목록과 가중치 정의
-        var weightedRewards = new List<(Action<int, int> RewardAction, int Weight)>
+        return new List<(Action<int, int> RewardAction, int Weight)>
         {
             // Action<RewardStackLevel(1-10), RemainingDiceStack(0-29)>
             ((lvl, dice) => LevelUpCard(lvl, dice), 3),
@@ -178,44 +164,71 @@ class Program
             ((lvl, dice) => PermanentSpeedBonus(lvl, dice), 3),
             ((lvl, dice) => Console.WriteLine("9. 특수 편지 (히든 스토리 요소)"), 1) // 1/3 확률 적용 (가중치 1)
         };
+    }
 
-        // 가중치 기반으로 무작위 3개 보상 선택
-        List<Action<int, int>> selectedRewards = new List<Action<int, int>>();
-        int totalWeight = weightedRewards.Sum(r => r.Weight);
-
-        for (int i = 0; i < 3; i++)
+    /// <summary>
+    /// 모든 누적된 보상 상자를 한 번에 열고 보상을 적용합니다.
+    /// </summary>
+    static void OpenRewardBox()
+    {
+        if (player.rewardBoxStack <= 0)
         {
-            int selection = random.Next(totalWeight);
-            int cumulativeWeight = 0;
-            int selectedIndex = -1;
-
-            for (int j = 0; j < weightedRewards.Count; j++)
-            {
-                cumulativeWeight += weightedRewards[j].Weight;
-                if (selection < cumulativeWeight)
-                {
-                    selectedIndex = j;
-                    break;
-                }
-            }
-
-            if (selectedIndex != -1)
-            {
-                selectedRewards.Add(weightedRewards[selectedIndex].RewardAction);
-                // 중복 보상을 피하기 위해 선택된 항목의 가중치를 0으로 설정
-                // (리스트를 수정하는 대신 간단히 처리)
-                weightedRewards[selectedIndex] = (weightedRewards[selectedIndex].RewardAction, 0); 
-                totalWeight -= weightedRewards[selectedIndex].Weight;
-            }
+            Console.WriteLine("보상 상자가 없습니다.");
+            return;
         }
         
-        // 선택된 보상 적용 (남은 주사위 스택은 LevelUpCard의 등급 판별에만 사용)
-        foreach (var reward in selectedRewards)
+        int totalBoxesToOpen = player.rewardBoxStack;
+        player.rewardBoxStack = 0; // 모든 상자를 개봉하므로 스택 초기화
+
+        Console.WriteLine($"\n[상자 일괄 개봉] 총 {totalBoxesToOpen}개의 보상 상자를 엽니다.");
+        Console.WriteLine("====================================================");
+
+        // 상자를 가장 높은 스택 레벨부터 1까지 순차적으로 엽니다.
+        for (int boxIndex = 0; boxIndex < totalBoxesToOpen; boxIndex++)
         {
-            reward(rewardStackLevel, player.diceStack); 
+            // 현재 개봉하는 상자에 적용할 스택 레벨 (N=1 to 10)
+            // 예: 5개 상자 -> 5, 4, 3, 2, 1 레벨 순으로 적용
+            int rewardStackLevel = totalBoxesToOpen - boxIndex; 
+            
+            Console.WriteLine($"\n--- [{boxIndex + 1}/{totalBoxesToOpen}번째 상자] 스택 레벨 {rewardStackLevel} 적용 ---");
+
+            // 보상 목록을 새로 가져와 현재 상자에서 3개의 고유 보상 선택
+            var rewardsToChooseFrom = GetWeightedRewards();
+            List<Action<int, int>> selectedRewards = new List<Action<int, int>>();
+
+            for (int i = 0; i < 3 && rewardsToChooseFrom.Count > 0; i++)
+            {
+                int currentTotalWeight = rewardsToChooseFrom.Sum(r => r.Weight);
+                if (currentTotalWeight <= 0) break; // 가중치가 0이면 선택할 것이 없음
+                
+                int selection = random.Next(currentTotalWeight);
+                int cumulativeWeight = 0;
+                
+                for (int j = 0; j < rewardsToChooseFrom.Count; j++)
+                {
+                    cumulativeWeight += rewardsToChooseFrom[j].Weight;
+                    if (selection < cumulativeWeight)
+                    {
+                        // 선택된 보상 적용 및 제거 (고유 보상 보장)
+                        selectedRewards.Add(rewardsToChooseFrom[j].RewardAction);
+                        
+                        // 선택된 보상 항목을 리스트에서 제거하여 다음 선택 시 중복 방지 및 가중치 재계산
+                        rewardsToChooseFrom.RemoveAt(j); 
+                        break;
+                    }
+                }
+            }
+            
+            // 선택된 보상 적용
+            foreach (var reward in selectedRewards)
+            {
+                // 현재 상자의 스택 레벨 (rewardStackLevel)과 남은 주사위 스택(player.diceStack) 전달
+                reward(rewardStackLevel, player.diceStack); 
+            }
         }
 
-        Console.WriteLine("================================================");
+        Console.WriteLine("\n====================================================");
+        Console.WriteLine($"총 {totalBoxesToOpen}개의 상자 개봉 완료! 현재 상자 스택: {player.rewardBoxStack}개");
     }
     
     //----------------- 보상 효과 메서드 (Stack Level N=1~10 사용) -----------------
@@ -247,8 +260,7 @@ class Program
         // 기본 골드
         int baseGold = random.Next(500, 1001);
         
-        // 스택 레벨에 비례하여 배율 증가 (1스택 1배, 2스택 2배, 3스택 4배, 4스택 8배...)
-        // N스택일 때 2^(N-1)배
+        // 스택 레벨에 비례하여 배율 증가 (N스택일 때 2^(N-1)배)
         long multiplier = (long)Math.Pow(2, rewardStackLevel - 1);
         
         // C# long을 사용하여 오버플로우 방지
