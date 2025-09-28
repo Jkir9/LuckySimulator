@@ -158,21 +158,29 @@ class Program
     /// <summary>
     /// 보상 목록과 가중치를 반환합니다.
     /// </summary>
-    static List<(Action<int, int> RewardAction, int Weight)> GetWeightedRewards()
+    static List<(Action<int, int> RewardAction, int Weight)> GetWeightedRewards(int rewardStackLevel)
     {
-        return new List<(Action<int, int> RewardAction, int Weight)>
+        var rewards = new List<(Action<int, int> RewardAction, int Weight)>
         {
             // Action<RewardStackLevel(1-10), RemainingDiceStack(0-29)>
             ((lvl, dice) => LevelUpCard(lvl, dice), 3),
             ((lvl, dice) => RandomItemBox(lvl, dice), 3),
-            ((lvl, dice) => Console.WriteLine("3. 개발자의 편지 (히든 요소)"), 1), // 1/3 확률 적용 (가중치 1)
+            ((lvl, dice) => Console.WriteLine("3. 개발자의 편지 (히든 요소)"), 1), 
             ((lvl, dice) => GoldReward(lvl, dice), 3),
             ((lvl, dice) => StatBonus(lvl, dice), 3),
             ((lvl, dice) => DiceStackLoss(lvl, dice), 3),
             ((lvl, dice) => LuckCurseCard(lvl, dice), 3),
-            ((lvl, dice) => PermanentSpeedBonus(lvl, dice), 3),
-            ((lvl, dice) => Console.WriteLine("9. 특수 편지 (히든 스토리 요소)"), 1) // 1/3 확률 적용 (가중치 1)
+            ((lvl, dice) => Console.WriteLine("9. 특수 편지 (히든 스토리 요소)"), 1) 
         };
+
+        // 요청하신 수정 사항: PermanentSpeedBonus는 3레벨 미만일 때 제외
+        if (rewardStackLevel >= 3)
+        {
+            rewards.Add(((lvl, dice) => PermanentSpeedBonus(lvl, dice), 3));
+        }
+        // 참고: PermanentSpeedBonus가 제외될 경우 (1, 2레벨) 다른 보상이 선택될 확률이 상대적으로 올라갑니다.
+
+        return rewards;
     }
 
     /// <summary>
@@ -195,8 +203,8 @@ class Program
         Console.WriteLine($"\n[상자 개봉] 레벨 {rewardStackLevel} 보상 상자를 엽니다.");
         Console.WriteLine("================= 획득한 보상 ==================");
 
-        // 보상 목록을 새로 가져와 3개의 고유 보상 선택 (가중치 적용)
-        var rewardsToChooseFrom = GetWeightedRewards();
+        // 보상 목록을 상자 레벨에 맞춰 가져옵니다.
+        var rewardsToChooseFrom = GetWeightedRewards(rewardStackLevel);
         List<Action<int, int>> selectedRewards = new List<Action<int, int>>();
 
         // 가중치 기반으로 무작위 3개 보상 선택
@@ -288,7 +296,6 @@ class Program
     // LevelUpCard는 등급 판별을 위해 상자 레벨을 사용합니다.
     static void LevelUpCard(int rewardStackLevel, int remainingDiceStack)
     {
-        // 오류 2 수정: 상자 레벨에 기반하여 등급 결정
         string rarity = DetermineRarity(rewardStackLevel);
         
         // 기본 카드 장수 (1~3장)
@@ -323,7 +330,7 @@ class Program
 
     static void StatBonus(int rewardStackLevel, int remainingDiceStack)
     {
-        // 오류 1 수정: 보상 상자 레벨에 비례하여 보너스 증가 (N 레벨 = N * 5%)
+        // 보상 상자 레벨에 비례하여 보너스 증가 (N 레벨 = N * 5%)
         float bonus = 0.05f * rewardStackLevel; 
         player.attackDamage += player.attackDamage * bonus;
         player.abilityPower += player.abilityPower * bonus;
@@ -341,7 +348,7 @@ class Program
     {
         // 기존 로직 유지
         string[] buffs = { "공격력 10% 증가", "치명타 확률 5% 증가", "공격 속도 10% 증가", "방어력 5% 증가" };
-        string[] curses = { "공격력 5% 감소", "이동 속도 10% 감소", "받는 피해 20% 증가", "쿨타임 5% 증가" };
+        string[] curses = { "공격력 10% 감소", "이동 속도 10% 감소", "받는 피해 10% 증가", "쿨타임 10% 증가" };
         string buff = buffs[random.Next(buffs.Length)];
         string curse = curses[random.Next(curses.Length)];
         Console.WriteLine($"7. 행운/저주 카드 등장! -> [행운]: {buff}, [저주]: {curse}");
@@ -349,15 +356,13 @@ class Program
 
     static void PermanentSpeedBonus(int rewardStackLevel, int remainingDiceStack)
     {
-        float bonus = 0f;
-        if (rewardStackLevel >= 3)
-        {
-            // 3레벨일 때 기본 0.1f, 1레벨 추가될 때마다 0.05f씩 증가
-            bonus = 0.1f + (rewardStackLevel - 3) * 0.05f;
-            
-            // 보너스 값이 음수가 되지 않도록 보호 (3레벨 미만 시 0)
-            bonus = Math.Max(0f, bonus); 
-        }
+        // GetWeightedRewards()에서 이미 3레벨 미만은 제외했으므로, 여기서는 계산만 수행합니다.
+        
+        // 3레벨일 때 기본 0.1f, 1레벨 추가될 때마다 0.05f씩 증가
+        float bonus = 0.1f + (rewardStackLevel - 3) * 0.05f;
+        
+        // 보너스 값이 음수가 되지 않도록 보호 (이 코드가 호출되는 시점에서는 rewardStackLevel >= 3)
+        bonus = Math.Max(0f, bonus); 
         
         player.movementSpeed += bonus;
         player.attackSpeed += bonus;
