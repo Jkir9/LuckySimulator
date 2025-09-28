@@ -10,7 +10,7 @@ public class PlayerStats
     public float attackSpeed;
     public float movementSpeed;
     public int diceStack;
-    public int rewardBoxStack; // 누적된 미개봉 보상 상자 수
+    public int rewardBoxStack; // 누적된 '미개봉 보상 상자의 레벨' (0~10)
 
     public PlayerStats()
     {
@@ -21,7 +21,7 @@ public class PlayerStats
         attackSpeed = 1.1f;
         movementSpeed = 1.1f;
         diceStack = 0;
-        rewardBoxStack = 0;
+        rewardBoxStack = 0; // 시작 레벨은 0
     }
 }
 
@@ -30,7 +30,6 @@ class Program
     private static readonly HashSet<int> bossLevels = new HashSet<int> { 11, 22, 33, 44, 55, 66, 77 };
     private static PlayerStats player = new PlayerStats();
     private static Random random = new Random();
-    private static bool canOpenBox = false;
 
     static void Main(string[] args)
     {
@@ -59,10 +58,11 @@ class Program
         // 레벨업 시 주사위 굴리기 (1~6)
         RollDice();
 
-        // 보스 처치 레벨에 도달하면 보스 주사위 굴리기 (2~7, 2번)
+        // 보스 처치 레벨에 도달하면 보스 주사위 굴리기 (2~7, 3번)
         if (bossLevels.Contains(player.level))
         {
-            Console.WriteLine($"보스 몬스터를 처치했습니다! 주사위가 2번 더 굴러갑니다.");
+            Console.WriteLine($"보스 몬스터를 처치했습니다! 주사위가 3번 더 굴러갑니다.");
+            RollBossDice();
             RollBossDice();
             RollBossDice();
         }
@@ -90,59 +90,68 @@ class Program
         Console.WriteLine($"[보스 주사위] {diceRoll}이(가) 나왔습니다. 주사위 스택: {player.diceStack}");
     }
 
+    /// <summary>
+    /// 주사위 스택을 확인하고 보상 상자 레벨을 올립니다.
+    /// </summary>
     static void CheckRewardBox()
     {
+        bool levelIncreased = false; // 상자 레벨이 이번 레벨업에서 실제로 증가했는지 추적
+
         if (player.diceStack >= 30)
         {
-            int newBoxes = player.diceStack / 30;
-            
-            // 최대 10스택 누적 가능 조건 처리
-            if (player.rewardBoxStack + newBoxes > 10)
+            if (player.rewardBoxStack < 10)
             {
-                newBoxes = 10 - player.rewardBoxStack;
-                if (newBoxes <= 0)
+                int levelsPossible = player.diceStack / 30; // 획득 가능한 레벨 수
+                int levelsToMax = 10 - player.rewardBoxStack; // 최대 레벨까지 남은 레벨 수
+                
+                int actualLevelsGained = Math.Min(levelsPossible, levelsToMax); // 실제로 획득한 레벨 수
+
+                if (actualLevelsGained > 0)
                 {
-                    Console.WriteLine("최대 보상 상자 스택(10개)에 도달하여 추가 적립되지 않았습니다.");
-                    player.diceStack %= 30; // 남은 스택은 유지
-                    return;
+                    player.rewardBoxStack += actualLevelsGained;
+                    
+                    int diceConsumed = actualLevelsGained * 30;
+                    player.diceStack -= diceConsumed; // 소모된 주사위 스택 제거
+
+                    Console.WriteLine($"\n** 주사위 스택이 소모되며 보상 상자 레벨이 {actualLevelsGained}만큼 상승했습니다! 현재 레벨: {player.rewardBoxStack}. **");
+                    levelIncreased = true; // 레벨이 증가했음을 표시
                 }
             }
-            
-            player.rewardBoxStack += newBoxes;
-            player.diceStack %= 30;
-            canOpenBox = true;
-            Console.WriteLine($"\n** 보상 상자 스택이 {newBoxes}개 쌓였습니다! 현재 {player.rewardBoxStack}개. **");
-            
-            AskOpenBox();
+            else // player.rewardBoxStack == 10
+            {
+                // 최대 레벨에 도달한 경우, 주사위 스택은 다음 상자 개봉 후 재활용될 때까지 유지됩니다.
+                Console.WriteLine("최대 보상 상자 레벨(10)에 도달하여 주사위 스택이 더 이상 레벨을 올리지 않습니다.");
+            }
         }
-        else
+        
+        // 보상 상자 레벨이 1 이상이고, 이번 LevelUp() 호출로 레벨이 실제로 증가한 경우에만 개봉을 요청합니다.
+        if (levelIncreased && player.rewardBoxStack > 0)
         {
-            canOpenBox = false;
+            AskOpenBox();
         }
     }
 
+    /// <summary>
+    /// 상자 개봉 여부를 사용자에게 묻습니다. (한 번의 레벨 증가 시 한 번만 호출됨)
+    /// </summary>
     static void AskOpenBox()
     {
-        while (canOpenBox)
-        {
-            Console.Write("보상 상자를 여시겠습니까? (Y/N): ");
-            var input = Console.ReadLine()?.ToUpper();
+        // AskOpenBox는 이제 CheckRewardBox에서 상자 레벨이 실제로 증가했을 때만 호출됩니다.
+        // 따라서 무한 루프(while) 대신 한 번만 물어보고 응답을 처리합니다.
+        Console.Write($"레벨 {player.rewardBoxStack} 보상 상자를 여시겠습니까? (Y/N): ");
+        var input = Console.ReadLine()?.ToUpper();
 
-            if (input == "Y")
-            {
-                // 모든 상자를 한 번에 엽니다.
-                OpenRewardBox(); 
-                canOpenBox = false;
-            }
-            else if (input == "N")
-            {
-                Console.WriteLine("상자를 열지 않고 진행합니다. 다음 레벨업에서 다시 기회가 있습니다.");
-                canOpenBox = false;
-            }
-            else
-            {
-                Console.WriteLine("잘못된 입력입니다. 'Y' 또는 'N'을 입력해주세요.");
-            }
+        if (input == "Y")
+        {
+            OpenRewardBox(); 
+        }
+        else if (input == "N")
+        {
+            Console.WriteLine("상자를 열지 않고 레벨업을 진행합니다. 다음 주사위 스택이 쌓여 상자 레벨이 더 오를 수 있습니다.");
+        }
+        else
+        {
+            Console.WriteLine("잘못된 입력입니다. 'Y' 또는 'N'을 입력해주세요.");
         }
     }
     
@@ -167,82 +176,126 @@ class Program
     }
 
     /// <summary>
-    /// 모든 누적된 보상 상자를 한 번에 열고 보상을 적용합니다.
+    /// 현재 레벨에 해당하는 보상 상자를 개봉하고 보상을 적용합니다. (1회 실행)
     /// </summary>
     static void OpenRewardBox()
     {
         if (player.rewardBoxStack <= 0)
         {
-            Console.WriteLine("보상 상자가 없습니다.");
+            Console.WriteLine("개봉할 보상 상자가 없습니다.");
             return;
         }
         
-        int totalBoxesToOpen = player.rewardBoxStack;
-        player.rewardBoxStack = 0; // 모든 상자를 개봉하므로 스택 초기화
+        // 개봉할 상자의 레벨
+        int rewardStackLevel = player.rewardBoxStack; 
+        
+        // 상자를 개봉했으므로 레벨 초기화
+        player.rewardBoxStack = 0; 
 
-        Console.WriteLine($"\n[상자 일괄 개봉] 총 {totalBoxesToOpen}개의 보상 상자를 엽니다.");
-        Console.WriteLine("====================================================");
+        Console.WriteLine($"\n[상자 개봉] 레벨 {rewardStackLevel} 보상 상자를 엽니다.");
+        Console.WriteLine("================= 획득한 보상 ==================");
 
-        // 상자를 가장 높은 스택 레벨부터 1까지 순차적으로 엽니다.
-        for (int boxIndex = 0; boxIndex < totalBoxesToOpen; boxIndex++)
+        // 보상 목록을 새로 가져와 3개의 고유 보상 선택 (가중치 적용)
+        var rewardsToChooseFrom = GetWeightedRewards();
+        List<Action<int, int>> selectedRewards = new List<Action<int, int>>();
+
+        // 가중치 기반으로 무작위 3개 보상 선택
+        for (int i = 0; i < 3 && rewardsToChooseFrom.Count > 0; i++)
         {
-            // 현재 개봉하는 상자에 적용할 스택 레벨 (N=1 to 10)
-            // 예: 5개 상자 -> 5, 4, 3, 2, 1 레벨 순으로 적용
-            int rewardStackLevel = totalBoxesToOpen - boxIndex; 
+            int currentTotalWeight = rewardsToChooseFrom.Sum(r => r.Weight);
+            if (currentTotalWeight <= 0) break;
             
-            Console.WriteLine($"\n--- [{boxIndex + 1}/{totalBoxesToOpen}번째 상자] 스택 레벨 {rewardStackLevel} 적용 ---");
-
-            // 보상 목록을 새로 가져와 현재 상자에서 3개의 고유 보상 선택
-            var rewardsToChooseFrom = GetWeightedRewards();
-            List<Action<int, int>> selectedRewards = new List<Action<int, int>>();
-
-            for (int i = 0; i < 3 && rewardsToChooseFrom.Count > 0; i++)
+            int selection = random.Next(currentTotalWeight);
+            int cumulativeWeight = 0;
+            
+            for (int j = 0; j < rewardsToChooseFrom.Count; j++)
             {
-                int currentTotalWeight = rewardsToChooseFrom.Sum(r => r.Weight);
-                if (currentTotalWeight <= 0) break; // 가중치가 0이면 선택할 것이 없음
-                
-                int selection = random.Next(currentTotalWeight);
-                int cumulativeWeight = 0;
-                
-                for (int j = 0; j < rewardsToChooseFrom.Count; j++)
+                cumulativeWeight += rewardsToChooseFrom[j].Weight;
+                if (selection < cumulativeWeight)
                 {
-                    cumulativeWeight += rewardsToChooseFrom[j].Weight;
-                    if (selection < cumulativeWeight)
-                    {
-                        // 선택된 보상 적용 및 제거 (고유 보상 보장)
-                        selectedRewards.Add(rewardsToChooseFrom[j].RewardAction);
-                        
-                        // 선택된 보상 항목을 리스트에서 제거하여 다음 선택 시 중복 방지 및 가중치 재계산
-                        rewardsToChooseFrom.RemoveAt(j); 
-                        break;
-                    }
+                    // 선택된 보상 적용 및 리스트에서 제거 (고유 보상 보장)
+                    selectedRewards.Add(rewardsToChooseFrom[j].RewardAction);
+                    
+                    // 리스트에서 제거
+                    rewardsToChooseFrom.RemoveAt(j); 
+                    break;
                 }
             }
-            
-            // 선택된 보상 적용
-            foreach (var reward in selectedRewards)
-            {
-                // 현재 상자의 스택 레벨 (rewardStackLevel)과 남은 주사위 스택(player.diceStack) 전달
-                reward(rewardStackLevel, player.diceStack); 
-            }
+        }
+        
+        // 선택된 보상 적용
+        foreach (var reward in selectedRewards)
+        {
+            // 상자 레벨 (rewardStackLevel)과 남은 주사위 스택(player.diceStack) 전달
+            reward(rewardStackLevel, player.diceStack); 
         }
 
-        Console.WriteLine("\n====================================================");
-        Console.WriteLine($"총 {totalBoxesToOpen}개의 상자 개봉 완료! 현재 상자 스택: {player.rewardBoxStack}개");
+        Console.WriteLine("================================================");
+        Console.WriteLine($"보상 상자 레벨이 0으로 초기화되었습니다. 다음 레벨업부터 주사위 스택을 다시 쌓아 상자 레벨을 올릴 수 있습니다.");
     }
     
     //----------------- 보상 효과 메서드 (Stack Level N=1~10 사용) -----------------
-    
-    // LevelUpCard는 등급 판별을 위해 RemainingDiceStack을 사용합니다.
+
+    /// <summary>
+    /// 상자 레벨에 기반하여 Common, Rare, Legendary 등급을 가중치 기반으로 결정합니다.
+    /// </summary>
+    static string DetermineRarity(int rewardStackLevel)
+    {
+        // { (Common 가중치, Rare 가중치, Legendary 가중치) } -> 합계는 100
+        // 상자 레벨 1~10 (인덱스 0~9)
+        int[,] levelRarityWeights = new int[,] 
+        {
+            { 100, 0, 0 },    // Level 1: C 100%, R 0%, L 0%
+            { 90, 10, 0 },    // Level 2: C 90%, R 10%, L 0%
+            { 80, 20, 0 },    // Level 3: C 80%, R 20%, L 0%
+            { 70, 20, 10 },   // Level 4: C 70%, R 20%, L 10%
+            { 60, 30, 10 },   // Level 5: C 60%, R 30%, L 10%
+            { 50, 35, 15 },   // Level 6: C 50%, R 35%, L 15%
+            { 50, 30, 20 },   // Level 7: C 50%, R 30%, L 20%
+            { 0, 80, 20 },    // Level 8: C 0%, R 80%, L 20%
+            { 0, 70, 30 },    // Level 9: C 0%, R 70%, L 30%
+            { 0, 60, 40 }     // Level 10: C 0%, R 60%, L 40%
+        };
+
+        if (rewardStackLevel < 1 || rewardStackLevel > 10)
+        {
+            return "Common"; // 기본값
+        }
+
+        int index = rewardStackLevel - 1;
+        int commonWeight = levelRarityWeights[index, 0];
+        int rareWeight = levelRarityWeights[index, 1];
+        int legendaryWeight = levelRarityWeights[index, 2];
+        
+        int totalWeight = commonWeight + rareWeight + legendaryWeight;
+        int selection = random.Next(totalWeight);
+
+        if (selection < commonWeight)
+        {
+            return "Common";
+        }
+        else if (selection < commonWeight + rareWeight)
+        {
+            return "Rare";
+        }
+        else
+        {
+            return "Legendary";
+        }
+    }
+
+
+    // LevelUpCard는 등급 판별을 위해 상자 레벨을 사용합니다.
     static void LevelUpCard(int rewardStackLevel, int remainingDiceStack)
     {
-        // 등급은 남은 주사위 스택(0~29)을 기준으로 합니다.
-        string rarity = remainingDiceStack <= 3 ? "Common" : (remainingDiceStack <= 6 ? "Rare" : "Legendary");
+        // 오류 2 수정: 상자 레벨에 기반하여 등급 결정
+        string rarity = DetermineRarity(rewardStackLevel);
         
         // 기본 카드 장수 (1~3장)
-        int baseCards = rarity == "Common" ? random.Next(1, 2) : (rarity == "Rare" ? random.Next(1, 3) : random.Next(1, 4));
+        // 등급이 높아질수록 기본 카드 장수의 기대값이 높아짐
+        int baseCards = rarity == "Common" ? random.Next(1, 2) : (rarity == "Rare" ? random.Next(1, 3) : random.Next(2, 4));
         
-        // 스택 레벨에 비례하여 카드 장수 증가 (1스택 1배, 2스택 2배, 3스택 3배...)
+        // 상자 레벨에 비례하여 카드 장수 증가
         int totalCards = baseCards * rewardStackLevel;
         
         player.level += totalCards;
@@ -251,7 +304,7 @@ class Program
 
     static void RandomItemBox(int rewardStackLevel, int remainingDiceStack)
     {
-        // 스택 레벨에 비례하여 아이템 수 증가 (1스택 1개, 2스택 2개...)
+        // 상자 레벨에 비례하여 아이템 수 증가 (1레벨 1개, 2레벨 2개...)
         Console.WriteLine($"2. 랜덤 아이템 박스 ({rewardStackLevel}개) 획득!");
     }
     
@@ -260,7 +313,7 @@ class Program
         // 기본 골드
         int baseGold = random.Next(500, 1001);
         
-        // 스택 레벨에 비례하여 배율 증가 (N스택일 때 2^(N-1)배)
+        // 상자 레벨에 비례하여 배율 증가 (N레벨일 때 2^(N-1)배)
         long multiplier = (long)Math.Pow(2, rewardStackLevel - 1);
         
         // C# long을 사용하여 오버플로우 방지
@@ -270,11 +323,11 @@ class Program
 
     static void StatBonus(int rewardStackLevel, int remainingDiceStack)
     {
-        // 기존 로직 유지: 주사위 스택(0-29)에 비례
-        float bonus = 0.05f * remainingDiceStack; 
+        // 오류 1 수정: 보상 상자 레벨에 비례하여 보너스 증가 (N 레벨 = N * 5%)
+        float bonus = 0.05f * rewardStackLevel; 
         player.attackDamage += player.attackDamage * bonus;
         player.abilityPower += player.abilityPower * bonus;
-        Console.WriteLine($"5. STR/DEX/INT, AD/AP +{bonus * 100}% (스택 {remainingDiceStack}만큼) -> AD: {player.attackDamage:F2}, AP: {player.abilityPower:F2}");
+        Console.WriteLine($"5. STR/DEX/INT, AD/AP +{bonus * 100:F0}% (상자 레벨 {rewardStackLevel}만큼) -> AD: {player.attackDamage:F2}, AP: {player.abilityPower:F2}");
     }
 
     static void DiceStackLoss(int rewardStackLevel, int remainingDiceStack)
@@ -288,7 +341,7 @@ class Program
     {
         // 기존 로직 유지
         string[] buffs = { "공격력 10% 증가", "치명타 확률 5% 증가", "공격 속도 10% 증가", "방어력 5% 증가" };
-        string[] curses = { "공격력 10% 감소", "이동 속도 10% 감소", "받는 피해 10% 증가", "쿨타임 10% 증가" };
+        string[] curses = { "공격력 5% 감소", "이동 속도 10% 감소", "받는 피해 20% 증가", "쿨타임 5% 증가" };
         string buff = buffs[random.Next(buffs.Length)];
         string curse = curses[random.Next(curses.Length)];
         Console.WriteLine($"7. 행운/저주 카드 등장! -> [행운]: {buff}, [저주]: {curse}");
@@ -299,17 +352,17 @@ class Program
         float bonus = 0f;
         if (rewardStackLevel >= 3)
         {
-            // 3스택일 때 기본 0.1f, 1스택 추가될 때마다 0.05f씩 증가
+            // 3레벨일 때 기본 0.1f, 1레벨 추가될 때마다 0.05f씩 증가
             bonus = 0.1f + (rewardStackLevel - 3) * 0.05f;
             
-            // 보너스 값이 음수가 되지 않도록 보호 (3스택 미만 시 0)
+            // 보너스 값이 음수가 되지 않도록 보호 (3레벨 미만 시 0)
             bonus = Math.Max(0f, bonus); 
         }
         
         player.movementSpeed += bonus;
         player.attackSpeed += bonus;
         
-        Console.WriteLine($"8. 이동속도/공격속도 +{(bonus * 100):F0}% (영구, 스택 레벨 {rewardStackLevel}) -> 이속: {player.movementSpeed:F2}, 공속: {player.attackSpeed:F2}");
+        Console.WriteLine($"8. 이동속도/공격속도 +{(bonus * 100):F0}% (영구, 상자 레벨 {rewardStackLevel}) -> 이속: {player.movementSpeed:F2}, 공속: {player.attackSpeed:F2}");
     }
     
     static void PrintPlayerStats()
@@ -321,7 +374,7 @@ class Program
         Console.WriteLine($"공격 속도: {player.attackSpeed:F2}");
         Console.WriteLine($"이동 속도: {player.movementSpeed:F2}");
         Console.WriteLine($"주사위 스택: {player.diceStack}");
-        Console.WriteLine($"보상 상자: {player.rewardBoxStack}개");
+        Console.WriteLine($"보상 상자 레벨: {player.rewardBoxStack}"); // 상자 레벨로 출력 변경
         Console.WriteLine("-------------------");
     }
 }
